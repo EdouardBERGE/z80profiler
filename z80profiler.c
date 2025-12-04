@@ -134,9 +134,9 @@ void initialize_crible(int maxrun) {
 	crible[i++]=0;
 	crible[i++]=255;
 	crible[i++]=127;
+	crible[i++]=128;
 	crible[i++]=1;
 	crible[i++]=2;
-	crible[i++]=3;
 	for (;i<256;i++) {
 		vmax=0;
 		for (j=0;j<256;j++) {
