@@ -200,6 +200,13 @@ int EmuZ80(struct s_parameter *param) {
 	unsigned int INTcpt=0,INTcptMax=64*52;
 	unsigned int VBLcpt=0,VBLcptMax=64*312;
 
+	int totalCond=0;
+	int JRCond=0,JRCondPartial=0;
+	int JPCond=0,JPCondPartial=0;
+	int RETCond=0,RETCondPartial=0;
+	int CALLCond=0,CALLCondPartial=0;
+	int rawCoverage=0;
+
 	unsigned long long totalCyc=0;
 	unsigned long long totalNop=0;
 	unsigned long long totalRun=0;
@@ -410,6 +417,37 @@ int EmuZ80(struct s_parameter *param) {
 		printf("Minimum RUN : %ld nops   %ld cycles\n",minRun,minRunC);
 		printf("Maximum RUN : %ld nops   %ld cycles\n",maxRun,maxRunC);
 	}
+
+	for (i=0;i<65536;i++) {
+		switch (z.userCond[i]) {
+			case 0:break;
+			case 1:
+			case 2:JPCondPartial++;
+			case 3:JPCond++;break;
+			case 4:
+			case 8:CALLCondPartial++;
+			case 12:CALLCond++;break;
+			case 16:
+			case 32:RETCondPartial++;
+			case 48:RETCond++;break;
+			case 64:
+			case 128:JRCondPartial++;
+			case 192:JRCond++;break;
+			default:printf("Internal error with condition stats v=#%02X (%d)\n",z.userCond[i],z.userCond[i]);exit(2);break;
+		}
+	}
+	totalCond=JRCond+RETCond+CALLCond+JPCond;
+	if (totalCond) {
+		printf("Branch coverage :\n");
+		printf("Conditionnal CALL : %d ",CALLCond); if (CALLCond) printf("coverage %.2lf%%",100.0-CALLCondPartial*50.0/CALLCond); printf("\n");
+		printf("Conditionnal JUMP : %d ",JPCond); if (JPCond) printf("coverage %.2lf%%",100.0-JPCondPartial*50.0/JPCond); printf("\n");
+		printf("Conditionnal JR   : %d ",JRCond); if (JRCond) printf("coverage %.2lf%%",100.0-JRCondPartial*50.0/JRCond); printf("\n");
+		printf("Conditionnal RET  : %d ",RETCond); if (RETCond) printf("coverage %.2lf%%",100.0-RETCondPartial*50.0/RETCond); printf("\n");
+	}
+	for (i=param->destOffset;i<param->destOffset+zesize;i++) {
+		if (z.userRW[i]) rawCoverage++;
+	}
+	printf("RAW memory coverage : %.2lf%%\n",rawCoverage*100.0/zesize);
 	return 0;
 }
 

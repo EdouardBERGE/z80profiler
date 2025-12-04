@@ -33,6 +33,9 @@ struct z80 {
   bool int_pending : 1, nmi_pending : 1;
 
   unsigned char userdata[65536];
+  unsigned char userRW[65536];
+  unsigned char userCond[65536];
+
   long nbinstructions;
 
   int breakOnHalt;

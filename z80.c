@@ -46,19 +46,25 @@ static const uint8_t cyc_ddfd[256] = {4, 4, 4, 4, 4, 4, 4, 4, 4, 15, 4, 4, 4, 4,
 #define GET_BIT(n, val) (((val) >> (n)) & 1)
 
 static inline uint8_t rb(z80* const z, uint16_t addr) {
+	z->userRW[addr]|=1;
   return z->read_byte(z->userdata, addr);
 }
 
 static inline void wb(z80* const z, uint16_t addr, uint8_t val) {
+	z->userRW[addr]|=2;
   z->write_byte(z->userdata, addr, val);
 }
 
 static inline uint16_t rw(z80* const z, uint16_t addr) {
+	z->userRW[addr]|=1;
+	z->userRW[addr+1]|=1;
   return (z->read_byte(z->userdata, addr + 1) << 8) |
          z->read_byte(z->userdata, addr);
 }
 
 static inline void ww(z80* const z, uint16_t addr, uint16_t val) {
+	z->userRW[addr]|=2;
+	z->userRW[addr+1]|=2;
   z->write_byte(z->userdata, addr, val & 0xFF);
   z->write_byte(z->userdata, addr + 1, val >> 8);
 }
@@ -184,8 +190,11 @@ static inline void jump(z80* const z, uint16_t addr) {
 static inline void cond_jump(z80* const z, bool condition) {
   const uint16_t addr = nextw(z);
   if (condition) {
+    z->userCond[z->pc]|=1;
     jump(z, addr);
-  }
+  } else {
+    z->userCond[z->pc]|=2;
+   }
   z->mem_ptr = addr;
 }
 
@@ -200,11 +209,13 @@ static inline void call(z80* const z, uint16_t addr) {
 static inline void cond_call(z80* const z, bool condition) {
   const uint16_t addr = nextw(z);
   if (condition) {
+    z->userCond[z->pc]|=4;
     call(z, addr);
     z->cyc += 7;
     z->nop+=5;
   } else {
     z->nop+=3;
+    z->userCond[z->pc]|=8;
   }
   z->mem_ptr = addr;
 }
@@ -218,10 +229,12 @@ static inline void ret(z80* const z) {
 // returns from subroutine if condition is true
 static inline void cond_ret(z80* const z, bool condition) {
   if (condition) {
+    z->userCond[z->pc]|=16;
     ret(z);
     z->cyc += 6;
     z->nop+=4;
   } else {
+    z->userCond[z->pc]|=32;
     z->nop+=2;
   }
 }
@@ -234,10 +247,12 @@ static inline void jr(z80* const z, int8_t displacement) {
 static inline void cond_jr(z80* const z, bool condition) {
   const int8_t b = nextb(z);
   if (condition) {
+    z->userCond[z->pc]|=64;
     jr(z, b);
     z->cyc += 5;
     z->nop+=3;
   } else {
+    z->userCond[z->pc]|=128;
 	  z->nop+=2;
   }
 }
@@ -740,6 +755,8 @@ void z80_init(z80* const z) {
   z->port_in = z80_wrapin;
   z->port_out = z80_wrapout;
   memset(z->userdata,0,sizeof(z->userdata));
+  memset(z->userRW,0,sizeof(z->userdata));
+  memset(z->userCond,0,sizeof(z->userdata));
 
   z->cyc = 0;
   z->nop = 0;
