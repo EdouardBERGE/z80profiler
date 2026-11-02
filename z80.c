@@ -1543,7 +1543,7 @@ void exec_opcode_cb(z80* const z, uint8_t opcode) {
     z->nop+=2; // extra nop for (hl) except BIT already added
   }
 
-  if (reg == &hl) {
+  if (reg == &hl && x_ != 1) {
     wb(z, get_hl(z), hl);
   }
 }
