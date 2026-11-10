@@ -128,6 +128,10 @@ static inline uint8_t get_f(z80* const z) {
   return val;
 }
 
+uint8_t z80_get_f(z80* const z) {
+  return get_f(z);
+}
+
 void z80_set_f(z80* const z, uint8_t val) {
   z->cf = (val >> 0) & 1;
   z->nf = (val >> 1) & 1;
@@ -808,6 +812,13 @@ void z80_init(z80* const z) {
   z->int_data = 0;
 
   z->nbinstructions=0;
+
+  // break settings are chosen by the caller after init
+  z->breakOnHalt = 0;
+  z->breakOnEI = 0;
+  z->breakOnUnknownInstruction = 0;
+  z->breakSuccess = 0;
+  z->breakReason = Z80_BREAK_NONE;
 }
 
 // executes the next instruction in memory + handles interrupts
@@ -815,6 +826,7 @@ void z80_step(z80* const z) {
   if (z->halted) {
     if (z->breakOnHalt) {
 	    z->breakSuccess=1;
+	    z->breakReason=Z80_BREAK_HALT;
 	    return;
     }
     exec_opcode(z, 0x00);
@@ -1056,6 +1068,7 @@ void exec_opcode(z80* const z, uint8_t opcode) {
   case 0xFB: z->iff_delay = 1; z->nop+=1;
 	    if (z->breakOnEI) {
 		    z->breakSuccess=1;
+		    z->breakReason=Z80_BREAK_EI;
 		    return;
 	    }
 	     break; // ei
@@ -1321,7 +1334,7 @@ void exec_opcode(z80* const z, uint8_t opcode) {
   case 0xDD: exec_opcode_ddfd(z, nextb(z), &z->ix); break;
   case 0xFD: exec_opcode_ddfd(z, nextb(z), &z->iy); break;
 
-  default: fprintf(stderr, "unknown opcode %02X\n", opcode); if (z->breakOnUnknownInstruction) z->breakSuccess=1; break;
+  default: fprintf(stderr, "unknown opcode %02X\n", opcode); if (z->breakOnUnknownInstruction) {z->breakSuccess=1;z->breakReason=Z80_BREAK_UNKNOWN;} break;
   }
 }
 
@@ -1580,7 +1593,7 @@ void exec_opcode_dcb(z80* const z, uint8_t opcode, uint16_t addr) {
   case 2: result = val & ~(1 << y_); break; // res y, (iz+d)
   case 3: result = val | (1 << y_); break; // set y, (iz+d)
 
-  default: fprintf(stderr, "unknown XYCB opcode: %02X\n", opcode); if (z->breakOnUnknownInstruction) z->breakSuccess=1;break;
+  default: fprintf(stderr, "unknown XYCB opcode: %02X\n", opcode); if (z->breakOnUnknownInstruction) {z->breakSuccess=1;z->breakReason=Z80_BREAK_UNKNOWN;}break;
   }
 
   // ld r[z], rot[y] (iz+d)
@@ -1887,7 +1900,7 @@ void exec_opcode_ed(z80* const z, uint8_t opcode) {
     z->nop+=5;
   } break; // rld
 
-  default: fprintf(stderr, "unknown ED opcode: %02X (nbInstr=%ld)\n", opcode,z->nbinstructions); if (z->breakOnUnknownInstruction) z->breakSuccess=1;break;
+  default: fprintf(stderr, "unknown ED opcode: %02X (nbInstr=%ld)\n", opcode,z->nbinstructions); if (z->breakOnUnknownInstruction) {z->breakSuccess=1;z->breakReason=Z80_BREAK_UNKNOWN;}break;
   }
 }
 

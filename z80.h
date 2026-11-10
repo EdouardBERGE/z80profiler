@@ -42,9 +42,19 @@ struct z80 {
   int breakOnEI;
   int breakOnUnknownInstruction;
   int breakSuccess;
+  int breakReason; // Z80_BREAK_xxx, set together with breakSuccess
+};
+
+// reasons why z80_step set breakSuccess
+enum {
+  Z80_BREAK_NONE=0,
+  Z80_BREAK_HALT,
+  Z80_BREAK_EI,
+  Z80_BREAK_UNKNOWN
 };
 
 void z80_set_f(z80* const z, uint8_t val);
+uint8_t z80_get_f(z80* const z);
 void z80_init(z80* const z);
 void z80_step(z80* const z);
 void z80_debug_output(z80* const z);
