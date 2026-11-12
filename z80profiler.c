@@ -313,6 +313,11 @@ unsigned int ParseValue(const char *str) {
 	if (str[0]=='0' && (str[1]=='x' || str[1]=='X')) return strtoul(str+2,NULL,16);
 	return strtoul(str,NULL,10);
 }
+// same with an optional minus sign
+int ParseInt(const char *str) {
+	if (str[0]=='-') return -(int)ParseValue(str+1);
+	return (int)ParseValue(str);
+}
 
 #define MAX_EXPECT 64
 #define MAX_DUMP   16
@@ -752,15 +757,18 @@ void Usage(int errcode) {
 	printf("                            2: use shuffled memory\n");
 	printf("-IOCPC                      mimic CPC input/output\n");
 	printf("\n");
-	printf("emulation init options :\n");
+	printf("emulation init options (values: decimal, 0x1234 or #1234) :\n");
 	printf("-pc <value>                 set PC value when starting\n");
-	printf("                            ex: -pc 0x100\n");
+	printf("                            ex: -pc 0x100 or -pc #100\n");
 	printf("-<reg> <value>              set register value\n");
 	printf("                            ex: -bc 0x100\n");
 	printf("     reg may be : a,f,b,c,d,e,h,l,xl,xh,yl,yh\n");
-	printf("                  af,bc,de,hl,ix,iy\n");
+	printf("                  af,bc,de,hl,ix,iy,sp\n");
 	printf("                  afp,bcp,dep,hlp,ap,fp,bp,cp,dp,ep,hp,lp\n");
 	printf("-crible <reg>,<reg>,...     crible registers in the list\n");
+	printf("NOTE : SP is #0000 when starting, the first CALL/PUSH writes in\n");
+	printf("       #FFFE-#FFFF : set the stack with -sp <value> (or ld sp,...\n");
+	printf("       in your program) if it uses CALL, PUSH, RST or interrupts\n");
 	printf("-addVec38                   add EI:RET in #38\n");
 	printf("\n");
 	printf("run options :\n");
@@ -814,8 +822,7 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 			}
 		} else if (stricmp(argv[i],"-fileOffset")==0) {
 			if (i+1<argc) {
-				if (argv[1][0]=='0' && argv[1][1]=='x') param->fileOffset=strtol(argv[1],NULL,16); else
-				param->fileOffset=atoi(argv[1]);
+				param->fileOffset=ParseInt(argv[1]);
 				printf("fileOffset setting #%04X (%d)\n",param->fileOffset,param->fileOffset);
 				i++;
 			} else {
@@ -824,8 +831,7 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 			}
 		} else if (stricmp(argv[i],"-fileLength")==0) {
 			if (i+1<argc) {
-				if (argv[1][0]=='0' && argv[1][1]=='x') param->fileLength=strtol(argv[1],NULL,16); else
-				param->fileLength=atoi(argv[1]);
+				param->fileLength=ParseInt(argv[1]);
 				printf("fileLength setting #%04X (%d)\n",param->fileLength,param->fileLength);
 				i++;
 			} else {
@@ -834,8 +840,7 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 			}
 		} else if (stricmp(argv[i],"-destOffset")==0) {
 			if (i+1<argc) {
-				if (argv[1][0]=='0' && argv[1][1]=='x') param->destOffset=strtol(argv[1],NULL,16); else
-				param->destOffset=atoi(argv[1]);
+				param->destOffset=ParseInt(argv[1]);
 				printf("destOffset setting #%04X (%d)\n",param->destOffset,param->destOffset);
 				i++;
 			} else {
@@ -844,8 +849,7 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 			}
 		} else if (stricmp(argv[i],"-stopAddress")==0) {
 			if (i+1<argc) {
-				if (argv[1][0]=='0' && argv[1][1]=='x') param->stopAddress=strtol(argv[1],NULL,16); else
-				param->stopAddress=atoi(argv[1]);
+				param->stopAddress=ParseInt(argv[1]);
 				printf("stopAddress setting #%04X (%d)\n",param->stopAddress,param->stopAddress);
 				i++;
 			} else {
@@ -854,8 +858,7 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 			}
 		} else if (stricmp(argv[i],"-maxrun")==0) {
 			if (i+1<argc) {
-				if (argv[1][0]=='0' && argv[1][1]=='x') param->maxRun=strtol(argv[1],NULL,16); else
-				param->maxRun=atoi(argv[1]);
+				param->maxRun=ParseInt(argv[1]);
 				printf("maxRun setting #%04X (%d)\n",param->maxRun,param->maxRun);
 				i++;
 			} else {
@@ -864,7 +867,7 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 			}
 		} else if (stricmp(argv[i],"-maxnop")==0) {
 			if (i+1<argc) {
-				param->maxNop=strtoul(argv[1],NULL,0); // decimal or 0x hexa
+				param->maxNop=ParseValue(argv[1]); // decimal, 0x or # hexa
 				param->useMaxNop=1;
 				printf("maxNop setting %u\n",param->maxNop);
 				i++;
@@ -874,7 +877,7 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 			}
 		} else if (stricmp(argv[i],"-maxCycle")==0) {
 			if (i+1<argc) {
-				param->maxCycle=strtoul(argv[1],NULL,0); // decimal or 0x hexa
+				param->maxCycle=ParseValue(argv[1]); // decimal, 0x or # hexa
 				param->useMaxCycle=1;
 				printf("maxCycle setting %u\n",param->maxCycle);
 				i++;
@@ -896,8 +899,7 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 			fprintf(stderr,"ERROR : Missing argument for -dumpFile option\nRun without option for help\n"); exit(1); }
 		} else if (stricmp(argv[i],"-INTdelay")==0) {
 			if (i+1<argc) {
-				if (argv[1][0]=='0' && argv[1][1]=='x') param->genINTdelay=strtol(argv[1],NULL,16); else
-				param->genINTdelay=atoi(argv[1]);
+				param->genINTdelay=ParseInt(argv[1]);
 				printf("INT delay setting #%04X (%d)\n",param->genINTdelay,param->genINTdelay);
 			} else {
 				fprintf(stderr,"ERROR : Missing argument for -VBLdelay option\nRun without option for help\n");
@@ -905,8 +907,7 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 			}
 		} else if (stricmp(argv[i],"-VBLdelay")==0) {
 			if (i+1<argc) {
-				if (argv[1][0]=='0' && argv[1][1]=='x') param->genVBLdelay=strtol(argv[1],NULL,16); else
-				param->genVBLdelay=atoi(argv[1]);
+				param->genVBLdelay=ParseInt(argv[1]);
 				printf("VBL delay setting #%04X (%d)\n",param->genVBLdelay,param->genVBLdelay);
 			} else {
 				fprintf(stderr,"ERROR : Missing argument for -VBLdelay option\nRun without option for help\n");
@@ -944,8 +945,7 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 			}
 		} else if (stricmp(argv[i],"-pc")==0) {
 			if (i+1<argc) {
-				if (argv[1][0]=='0' && argv[1][1]=='x') param->runAt=strtol(argv[1],NULL,16); else
-				param->runAt=atoi(argv[1]);
+				param->runAt=ParseInt(argv[1]);
 				printf("will RUN at #%04X (%d)\n",param->runAt,param->runAt);
 				i++;
 			} else {
@@ -953,99 +953,99 @@ int ParseOptions(char **argv,int argc, struct s_parameter *param)
 				exit(1);
 			}
 		} else if (stricmp(argv[i],"-a")==0) {
-			if (i+1<argc) { if (argv[1][0]=='0' && argv[1][1]=='x') param->a=strtol(argv[1],NULL,16); else param->a=atoi(argv[1]); i++; } else {
+			if (i+1<argc) { param->a=ParseInt(argv[1]); i++; } else {
 			fprintf(stderr,"ERROR : Missing argument for -a option\nRun without option for help\n"); exit(1); }  
 		} else if (stricmp(argv[i],"-b")==0) {
-			if (i+1<argc) { if (argv[1][0]=='0' && argv[1][1]=='x') param->b=strtol(argv[1],NULL,16); else param->b=atoi(argv[1]); i++; } else {
+			if (i+1<argc) { param->b=ParseInt(argv[1]); i++; } else {
 			fprintf(stderr,"ERROR : Missing argument for -b option\nRun without option for help\n"); exit(1); }  
 		} else if (stricmp(argv[i],"-c")==0) {
-			if (i+1<argc) { if (argv[1][0]=='0' && argv[1][1]=='x') param->c=strtol(argv[1],NULL,16); else param->c=atoi(argv[1]); i++; } else {
+			if (i+1<argc) { param->c=ParseInt(argv[1]); i++; } else {
 			fprintf(stderr,"ERROR : Missing argument for -c option\nRun without option for help\n"); exit(1); }  
 		} else if (stricmp(argv[i],"-d")==0) {
-			if (i+1<argc) { if (argv[1][0]=='0' && argv[1][1]=='x') param->d=strtol(argv[1],NULL,16); else param->d=atoi(argv[1]); i++; } else {
+			if (i+1<argc) { param->d=ParseInt(argv[1]); i++; } else {
 			fprintf(stderr,"ERROR : Missing argument for -d option\nRun without option for help\n"); exit(1); }  
 		} else if (stricmp(argv[i],"-e")==0) {
-			if (i+1<argc) { if (argv[1][0]=='0' && argv[1][1]=='x') param->e=strtol(argv[1],NULL,16); else param->e=atoi(argv[1]); i++; } else {
+			if (i+1<argc) { param->e=ParseInt(argv[1]); i++; } else {
 			fprintf(stderr,"ERROR : Missing argument for -e option\nRun without option for help\n"); exit(1); }  
 		} else if (stricmp(argv[i],"-f")==0) {
-			if (i+1<argc) { if (argv[1][0]=='0' && argv[1][1]=='x') param->regF=strtol(argv[1],NULL,16); else param->regF=atoi(argv[1]); i++; } else {
+			if (i+1<argc) { param->regF=ParseInt(argv[1]); i++; } else {
 			fprintf(stderr,"ERROR : Missing argument for -f option\nRun without option for help\n"); exit(1); }  
 		} else if (stricmp(argv[i],"-h")==0) {
-			if (i+1<argc) { if (argv[1][0]=='0' && argv[1][1]=='x') param->h=strtol(argv[1],NULL,16); else param->h=atoi(argv[1]); i++; } else {
+			if (i+1<argc) { param->h=ParseInt(argv[1]); i++; } else {
 			fprintf(stderr,"ERROR : Missing argument for -h option\nRun without option for help\n"); exit(1); }  
 		} else if (stricmp(argv[i],"-l")==0) {
-			if (i+1<argc) { if (argv[1][0]=='0' && argv[1][1]=='x') param->l=strtol(argv[1],NULL,16); else param->l=atoi(argv[1]); i++; } else {
+			if (i+1<argc) { param->l=ParseInt(argv[1]); i++; } else {
 			fprintf(stderr,"ERROR : Missing argument for -l option\nRun without option for help\n"); exit(1); }  
 		} else if (stricmp(argv[i],"-xl")==0) {
-			if (i+1<argc) { if (argv[1][0]=='0' && argv[1][1]=='x') param->xl=strtol(argv[1],NULL,16); else param->xl=atoi(argv[1]); i++; } else {
+			if (i+1<argc) { param->xl=ParseInt(argv[1]); i++; } else {
 			fprintf(stderr,"ERROR : Missing argument for -xl option\nRun without option for help\n"); exit(1); } 
 		} else if (stricmp(argv[i],"-xh")==0) {
-			if (i+1<argc) { if (argv[1][0]=='0' && argv[1][1]=='x') param->xh=strtol(argv[1],NULL,16); else param->xh=atoi(argv[1]); i++; } else {
+			if (i+1<argc) { param->xh=ParseInt(argv[1]); i++; } else {
 			fprintf(stderr,"ERROR : Missing argument for -xh option\nRun without option for help\n"); exit(1); }  
 		} else if (stricmp(argv[i],"-yl")==0) {
-			if (i+1<argc) { if (argv[1][0]=='0' && argv[1][1]=='x') param->yl=strtol(argv[1],NULL,16); else param->yl=atoi(argv[1]); i++; } else {
+			if (i+1<argc) { param->yl=ParseInt(argv[1]); i++; } else {
 			fprintf(stderr,"ERROR : Missing argument for -yl option\nRun without option for help\n"); exit(1); }  
 		} else if (stricmp(argv[i],"-yh")==0) {
-			if (i+1<argc) { if (argv[1][0]=='0' && argv[1][1]=='x') param->yh=strtol(argv[1],NULL,16); else param->yh=atoi(argv[1]); i++; } else {
+			if (i+1<argc) { param->yh=ParseInt(argv[1]); i++; } else {
 			fprintf(stderr,"ERROR : Missing argument for -yh option\nRun without option for help\n"); exit(1); }
 		} else if (stricmp(argv[i],"-ix")==0) {
-			if (i+1<argc) { if (argv[1][0]=='0' && argv[1][1]=='x') param->ix=strtol(argv[1],NULL,16); else param->ix=atoi(argv[1]); i++; } else {
+			if (i+1<argc) { param->ix=ParseInt(argv[1]); i++; } else {
 			fprintf(stderr,"ERROR : Missing argument for -ix option\nRun without option for help\n"); exit(1); }
 		} else if (stricmp(argv[i],"-iy")==0) {
-			if (i+1<argc) { if (argv[1][0]=='0' && argv[1][1]=='x') param->iy=strtol(argv[1],NULL,16); else param->iy=atoi(argv[1]); i++; } else {
+			if (i+1<argc) { param->iy=ParseInt(argv[1]); i++; } else {
 			fprintf(stderr,"ERROR : Missing argument for -iy option\nRun without option for help\n"); exit(1); }
 
 		} else if (stricmp(argv[i],"-af")==0) {
-			if (i+1<argc) { if (argv[1][0]=='0' && argv[1][1]=='x') param->af=strtol(argv[1],NULL,16); else param->af=atoi(argv[1]); i++; } else {
+			if (i+1<argc) { param->af=ParseInt(argv[1]); i++; } else {
 			fprintf(stderr,"ERROR : Missing argument for -af option\nRun without option for help\n"); exit(1); }
 		} else if (stricmp(argv[i],"-bc")==0) {
-			if (i+1<argc) { if (argv[1][0]=='0' && argv[1][1]=='x') param->bc=strtol(argv[1],NULL,16); else param->bc=atoi(argv[1]); i++; } else {
+			if (i+1<argc) { param->bc=ParseInt(argv[1]); i++; } else {
 			fprintf(stderr,"ERROR : Missing argument for -bc option\nRun without option for help\n"); exit(1); }
 		} else if (stricmp(argv[i],"-de")==0) {
-			if (i+1<argc) { if (argv[1][0]=='0' && argv[1][1]=='x') param->de=strtol(argv[1],NULL,16); else param->de=atoi(argv[1]); i++; } else {
+			if (i+1<argc) { param->de=ParseInt(argv[1]); i++; } else {
 			fprintf(stderr,"ERROR : Missing argument for -de option\nRun without option for help\n"); exit(1); }
 		} else if (stricmp(argv[i],"-hl")==0) {
-			if (i+1<argc) { if (argv[1][0]=='0' && argv[1][1]=='x') param->hl=strtol(argv[1],NULL,16); else param->hl=atoi(argv[1]); i++; } else {
+			if (i+1<argc) { param->hl=ParseInt(argv[1]); i++; } else {
 			fprintf(stderr,"ERROR : Missing argument for -hl option\nRun without option for help\n"); exit(1); }
 		} else if (stricmp(argv[i],"-sp")==0) {
-			if (i+1<argc) { if (argv[1][0]=='0' && argv[1][1]=='x') param->sp=strtol(argv[1],NULL,16); else param->sp=atoi(argv[1]); i++; } else {
+			if (i+1<argc) { param->sp=ParseInt(argv[1]); i++; } else {
 			fprintf(stderr,"ERROR : Missing argument for -sp option\nRun without option for help\n"); exit(1); }
 		// extended registers
 		} else if (stricmp(argv[i],"-ap")==0) {
-			if (i+1<argc) { if (argv[1][0]=='0' && argv[1][1]=='x') param->ap=strtol(argv[1],NULL,16); else param->ap=atoi(argv[1]); i++; } else {
+			if (i+1<argc) { param->ap=ParseInt(argv[1]); i++; } else {
 			fprintf(stderr,"ERROR : Missing argument for -ap option\nRun without option for help\n"); exit(1); }  
 		} else if (stricmp(argv[i],"-bp")==0) {
-			if (i+1<argc) { if (argv[1][0]=='0' && argv[1][1]=='x') param->bp=strtol(argv[1],NULL,16); else param->bp=atoi(argv[1]); i++; } else {
+			if (i+1<argc) { param->bp=ParseInt(argv[1]); i++; } else {
 			fprintf(stderr,"ERROR : Missing argument for -bp option\nRun without option for help\n"); exit(1); }  
 		} else if (stricmp(argv[i],"-cp")==0) {
-			if (i+1<argc) { if (argv[1][0]=='0' && argv[1][1]=='x') param->cp=strtol(argv[1],NULL,16); else param->cp=atoi(argv[1]); i++; } else {
+			if (i+1<argc) { param->cp=ParseInt(argv[1]); i++; } else {
 			fprintf(stderr,"ERROR : Missing argument for -cp option\nRun without option for help\n"); exit(1); }  
 		} else if (stricmp(argv[i],"-dp")==0) {
-			if (i+1<argc) { if (argv[1][0]=='0' && argv[1][1]=='x') param->dp=strtol(argv[1],NULL,16); else param->dp=atoi(argv[1]); i++; } else {
+			if (i+1<argc) { param->dp=ParseInt(argv[1]); i++; } else {
 			fprintf(stderr,"ERROR : Missing argument for -dp option\nRun without option for help\n"); exit(1); }  
 		} else if (stricmp(argv[i],"-ep")==0) {
-			if (i+1<argc) { if (argv[1][0]=='0' && argv[1][1]=='x') param->ep=strtol(argv[1],NULL,16); else param->ep=atoi(argv[1]); i++; } else {
+			if (i+1<argc) { param->ep=ParseInt(argv[1]); i++; } else {
 			fprintf(stderr,"ERROR : Missing argument for -ep option\nRun without option for help\n"); exit(1); }  
 		} else if (stricmp(argv[i],"-fp")==0) {
-			if (i+1<argc) { if (argv[1][0]=='0' && argv[1][1]=='x') param->fp=strtol(argv[1],NULL,16); else param->fp=atoi(argv[1]); i++; } else {
+			if (i+1<argc) { param->fp=ParseInt(argv[1]); i++; } else {
 			fprintf(stderr,"ERROR : Missing argument for -fp option\nRun without option for help\n"); exit(1); }  
 		} else if (stricmp(argv[i],"-hp")==0) {
-			if (i+1<argc) { if (argv[1][0]=='0' && argv[1][1]=='x') param->hp=strtol(argv[1],NULL,16); else param->hp=atoi(argv[1]); i++; } else {
+			if (i+1<argc) { param->hp=ParseInt(argv[1]); i++; } else {
 			fprintf(stderr,"ERROR : Missing argument for -hp option\nRun without option for help\n"); exit(1); }  
 		} else if (stricmp(argv[i],"-lp")==0) {
-			if (i+1<argc) { if (argv[1][0]=='0' && argv[1][1]=='x') param->lp=strtol(argv[1],NULL,16); else param->lp=atoi(argv[1]); i++; } else {
+			if (i+1<argc) { param->lp=ParseInt(argv[1]); i++; } else {
 			fprintf(stderr,"ERROR : Missing argument for -lp option\nRun without option for help\n"); exit(1); }  
 		} else if (stricmp(argv[i],"-afp")==0) {
-			if (i+1<argc) { if (argv[1][0]=='0' && argv[1][1]=='x') param->afp=strtol(argv[1],NULL,16); else param->afp=atoi(argv[1]); i++; } else {
+			if (i+1<argc) { param->afp=ParseInt(argv[1]); i++; } else {
 			fprintf(stderr,"ERROR : Missing argument for -afp option\nRun without option for help\n"); exit(1); }
 		} else if (stricmp(argv[i],"-bcp")==0) {
-			if (i+1<argc) { if (argv[1][0]=='0' && argv[1][1]=='x') param->bcp=strtol(argv[1],NULL,16); else param->bcp=atoi(argv[1]); i++; } else {
+			if (i+1<argc) { param->bcp=ParseInt(argv[1]); i++; } else {
 			fprintf(stderr,"ERROR : Missing argument for -bcp option\nRun without option for help\n"); exit(1); }
 		} else if (stricmp(argv[i],"-dep")==0) {
-			if (i+1<argc) { if (argv[1][0]=='0' && argv[1][1]=='x') param->dep=strtol(argv[1],NULL,16); else param->dep=atoi(argv[1]); i++; } else {
+			if (i+1<argc) { param->dep=ParseInt(argv[1]); i++; } else {
 			fprintf(stderr,"ERROR : Missing argument for -dep option\nRun without option for help\n"); exit(1); }
 		} else if (stricmp(argv[i],"-hlp")==0) {
-			if (i+1<argc) { if (argv[1][0]=='0' && argv[1][1]=='x') param->hlp=strtol(argv[1],NULL,16); else param->hlp=atoi(argv[1]); i++; } else {
+			if (i+1<argc) { param->hlp=ParseInt(argv[1]); i++; } else {
 			fprintf(stderr,"ERROR : Missing argument for -hlp option\nRun without option for help\n"); exit(1); }
 
 		} else { fprintf(stderr,"ERROR : Invalid option [%s]\nRun without option for help\n",argv[0]); exit(1); }
